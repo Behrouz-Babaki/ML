@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 '''
 Created on Jun 26, 2016
 
@@ -38,7 +39,7 @@ if __name__ == '__main__':
 
     resultsdir = './' + nameenv
 
-    env.monitor.start(resultsdir, force=True)
+    #env.monitor.start(resultsdir, force=True)
     print env.observation_space, env.action_space, env.spec.timestep_limit, env.reward_range, gym.envs.registry.spec(nameenv).trials
     if nameenv == 'Acrobot-v0':
         env.reward_range = (-1., 0.)
@@ -139,7 +140,7 @@ if __name__ == '__main__':
             agent.config['scalereward'], 'avg', avg / agent.config['scalereward'], cost / steps, 'eps',\
             agent.epsilon(eps), len(agent.memory)
     # fig.savefig('last.png')
-    env.monitor.close()
+    #env.monitor.close()
     print agent.config
     # gym.upload(resultsdir, api_key='YOURAPI')
 
