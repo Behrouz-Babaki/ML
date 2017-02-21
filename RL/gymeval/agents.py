@@ -49,11 +49,6 @@ def multilayer_perceptron(_X, numhidden, regulariz, minout=None, maxout=None, in
         return layer_out, regul
 
 
-def onehot(i, n):
-    out = np.zeros(n)
-    out[i] = 1.
-    return out
-
 
 class deepQAgent(object):
     def __del__(self):
@@ -64,13 +59,15 @@ class deepQAgent(object):
         if filename is None:
             filename = self.config['file']
         with open(filename + ".p", "wb") as input_file:
-            pickle.dump((self.observation_space, self.action_space, self.reward_range, self.config), input_file)
+            pickle.dump((self.observation_space, self.action_space, 
+                         self.reward_range, self.config), input_file)
         save_path = self.saver.save(self.sess, filename + ".tf")
 
     def __init__(self, observation_space, action_space, reward_range, **userconfig):
         if userconfig["file"] is not None and os.path.isfile(userconfig["file"] + ".p"):
             with open(userconfig["file"] + ".p", "rb") as input_file:
-                self.observation_space, self.action_space, self.reward_range, self.config = pickle.load(input_file)
+                self.observation_space, self.action_space, self.reward_range, 
+                self.config = pickle.load(input_file)
                 # overwrite some parameter
                 self.config["initial_learnrate"] = userconfig["initial_learnrate"]
                 self.config["eps"] = userconfig["eps"]
@@ -81,11 +78,6 @@ class deepQAgent(object):
                 self.config["memsize"] = userconfig["memsize"]
                 if not ("featureset" in self.config):
                     self.config["featureset"] = userconfig["featureset"]
-                    # self.config["fee"]=userconfig["fee"]
-                    # self.config["minfee"]=userconfig["minfee"]
-                    # self.config["maxfee"]=userconfig["maxfee"]
-                    # self.config["multiplebuy"]=userconfig["multiplebuy"]
-                    # self.config["numstock"]=userconfig["numstock"]
         else:
             self.observation_space = observation_space
             self.action_space = action_space
@@ -112,15 +104,16 @@ class deepQAgent(object):
         if self.config["seed"] is not None:
             np.random.seed(self.config["seed"])
             print "seed", self.config["seed"]
-        # print self.config["initial_learnrate"]
         self.isdiscrete = isinstance(self.action_space, gym.spaces.Discrete)
         if not isinstance(self.action_space, gym.spaces.Discrete):
             raise Exception('Observation space {} incompatible with {}. (Only supports Discrete action spaces.)'.format(
                 observation_space, self))
 
         self.global_step = tf.Variable(0, trainable=False, name="global_step")
-        self.learnrate = tf.train.exponential_decay(self.config['initial_learnrate'], self.global_step, 100,
-                                                    self.config['decay_learnrate'], staircase=True, name="learnrate")
+        self.learnrate = tf.train.exponential_decay(self.config['initial_learnrate'], 
+                                                    self.global_step, 100,
+                                                    self.config['decay_learnrate'], 
+                                                    staircase=True, name="learnrate")
         self.bias = tf.Variable(0.0, trainable=False, name="bias")
 
         self.initQnetwork()
@@ -148,60 +141,34 @@ class deepQAgent(object):
     def getlearnrate(self):
         return self.sess.run(self.learnrate)
 
-    def stateautoencoder(self, n_input):
-        self.plotautoenc = False
-        self.outstate, regul, self.hiddencode = multilayer_perceptron(self.sa, [n_input, 2, n_input],
-                                                                      [0.000001, 0.000001], outhidden=1,
-                                                                      seed=self.config["seed"])
-        self.costautoenc = tf.reduce_mean((self.sa - self.outstate) ** 2) + regul
-        self.optimizerautoenc = tf.train.RMSPropOptimizer(self.learnrate, 0.9, 0.05).minimize(self.costautoenc,
-                                                                                              global_step=self.global_step)
-
     def initQnetwork(self):
-        if self.isdiscrete:
-            n_input = self.observation_space.shape[0] * (self.config['past'] + 1)
-            self.n_out = self.action_space.n
+        n_input = self.observation_space.shape[0] * (self.config['past'] + 1)
+        self.n_out = self.action_space.n
 
         self.x = tf.placeholder("float", [None, n_input], name="self.x")
         self.y = tf.placeholder("float", [None, 1], name="self.y")
-        self.yR = tf.placeholder("float", [None, 1], name="self.yR")
 
         print 'obs', n_input, 'action', self.n_out
         self.Qrange = (self.reward_range[0] * 1. / (1. - self.config['discount']),
                        self.reward_range[1] * 1. / (1. - self.config['discount']))
         print self.Qrange
-        self.Q, regul = multilayer_perceptron(self.x, [n_input] + self.config['hiddenlayers'] + [self.n_out],
+        self.Q, regul = multilayer_perceptron(self.x, 
+                                              [n_input] + self.config['hiddenlayers'] + [self.n_out],
                                               self.config['regularization'],
                                               initbias=.0, seed=self.config["seed"])  
+        self.curraction = tf.placeholder("float", [None, self.n_out], name="curraction")
+        self.singleQ = tf.reduce_sum(self.curraction * self.Q,
+                                     reduction_indices=1)  
+        self.singleQ = tf.reshape(self.singleQ, [-1, 1])
 
-        self.R, regulR = multilayer_perceptron(self.x, [n_input, 100, self.n_out], self.config['regularization'],
-                                               initbias=.0, seed=self.config["seed"])  
-
-        if self.isdiscrete:
-            self.curraction = tf.placeholder("float", [None, self.n_out], name="curraction")
-            self.singleQ = tf.reduce_sum(self.curraction * self.Q,
-                                         reduction_indices=1)  
-            self.singleQ = tf.reshape(self.singleQ, [-1, 1])
-
-            self.singleR = tf.reduce_sum(self.curraction * self.R,
-                                         reduction_indices=1)  
-            self.singleR = tf.reshape(self.singleR, [-1, 1])
-
-            self.errorlistR = (self.singleR - self.yR) ** 2
-            self.errorlist = (self.singleQ - self.y) ** 2
+        self.errorlist = (self.singleQ - self.y) ** 2
 
         self.cost = tf.reduce_mean(self.errorlist) + regul
-        self.costR = tf.reduce_mean(self.errorlistR) + regulR
         self.lastcost = 0.
-        self.optimizer = tf.train.RMSPropOptimizer(self.learnrate, 0.9, self.config['momentum']).minimize(self.cost,
-                                                                                                          global_step=self.global_step)
-
-        self.optimizerR = tf.train.RMSPropOptimizer(self.learnrate, 0.9, 0.).minimize(self.costR,
-                                                                                      global_step=self.global_step)
+        self.optimizer = tf.train.RMSPropOptimizer(self.learnrate, 0.9, 
+                                                   self.config['momentum']).minimize(self.cost, global_step=self.global_step)
 
         self.sa = tf.placeholder("float", [None, n_input + self.n_out], name="sa")
-        self.stateautoencoder(n_input + self.n_out)
-
         self.saver = tf.train.Saver()
         self.sess = tf.Session()
         self.memory = []
@@ -269,30 +236,6 @@ class deepQAgent(object):
                     self.sess.run(self.optimizer, feed_dict={self.x: allstate, self.y: alltarget.reshape((-1, 1)),
                                                              self.curraction: allactionsparse})
 
-                    if self.plotautoenc:
-                        sa = np.concatenate((allstate, allactionsparse), 1)
-                        self.sess.run(self.optimizerautoenc, feed_dict={self.sa: sa, self.outstate: sa})
-                    if False:
-                        c = self.sess.run(self.cost, feed_dict={self.x: allstate, self.y: alltarget.reshape((-1, 1)),
-                                                                self.curraction: allactionsparse})
-
-                        if c > self.lastcost:
-                            self.setlearnrate(0.9999)
-                        else:
-                            self.setlearnrate(1.0001)
-                        self.lastcost = c
-            allactionsparse = np.zeros((allstate.shape[0], self.n_out))
-            allactionsparse[np.arange(allaction.shape[0]), allaction] = 1.
-            indexes = np.array(indexes)
-            erlist = self.sess.run(self.errorlist, feed_dict={self.x: allstate, self.y: alltarget.reshape((-1, 1)),
-                                                              self.curraction: allactionsparse})
-            erlist = erlist.reshape(-1, )
-            self.errmemory.append(erlist[0])
-
-            for i, er in enumerate(erlist):
-                self.errmemory[indexes[i]] = er
-            self.errmemory = self.errmemory[-self.config['memsize']:]
-
             if len(self.memory) > 0 and np.array_equal(self.memory[-1][3], state):
                 self.memory[-1][6] = 1
             self.memory.append([state, action, reward, obnew, notdone, None, None])
@@ -345,19 +288,25 @@ def do_rollout(agent, env, episode, num_steps=None, render=False):
     ob = env.reset()
     ob = agent.scaleobs(ob)
     ob1 = np.copy(ob)
+    # at first, copy the first observation multiple times
     for _ in range(agent.config["past"]):
         ob1 = np.concatenate((ob1, ob))
+    # lists of all observations and all actions
     listob = [ob1]
     listact = []
     for t in range(num_steps):
-
+        # choose the action epsilon-greedily
         a = agent.act(ob1, episode)
         (obnew, reward, done, _info) = env.step(a)
+        # scale the observations and rewards
         obnew = agent.scaleobs(obnew)
         reward *= agent.config['scalereward']
         listact.append(a)
+        
+        # remove one from the head, add one to the tail
         obnew1 = np.concatenate((ob1[ob.shape[0]:], obnew))
-
+        # add it to the list of all observations 
+        # Each element is a number of consecutive observations
         listob.append(obnew1)
 
         start = time.time()
@@ -367,6 +316,7 @@ def do_rollout(agent, env, episode, num_steps=None, render=False):
             print 'learn time', (time.time() - start) * 100., agent.maxq(
                 ob1), reward  
 
+        # use this observation as the state for the next round
         ob1 = obnew1
         total_rew += reward
         if render and t % 2 == 0:
