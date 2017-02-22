@@ -11,7 +11,7 @@ import  time
 
 import numpy as np
 import gym
-import agents
+import kagents
 
 
 if __name__ == '__main__':
@@ -80,7 +80,7 @@ if __name__ == '__main__':
             "momentum": 0.05,
             "file": None,
             "seed": seed}
-    agent = agents.deepQAgent(env.observation_space, env.action_space, env.reward_range, **params)
+    agent = kagents.deepQAgent(env.observation_space, env.action_space, env.reward_range, **params)
     num_steps = env.spec.timestep_limit
     avg = 0.
     oldavg = 0.
@@ -99,13 +99,13 @@ if __name__ == '__main__':
         if episode % showevery == 0:
             render = True
             eps = None
-            print 'episode', episode, 'l rate', agent.getlearnrate()
+            print 'episode', episode
             oldavg = avg
         else:
             render = False
             eps = episode
         startt = time.time()
-        total_rew, steps, cost, listob, listact = agents.do_rollout(agent, env, eps, render=render)
+        total_rew, steps, cost, listob, listact = kagents.do_rollout(agent, env, eps, render=render)
 
         if episode == 0:
             avg = total_rew

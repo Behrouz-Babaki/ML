@@ -180,12 +180,21 @@ class deepQAgent(object):
             self.saver.restore(self.sess, self.config['file'] + ".tf")
         self.sess.run(tf.assign(self.global_step, 0))
 
+    # state: origin state_set
+    # action: action taken
+    # obnew: observed state_set
+    # reward: observed reward
+    # notdone
+    # nextaction: selected action for observed state    
     def learn(self, state, action, obnew, reward, notdone, nextaction):
         if self.isdiscrete:
+            # line 12 in the pseudocode
             target = reward + self.config['discount'] * self.maxq(obnew) * notdone
-
+            # make the target a single value
             target = target.reshape(1, )
+            # make the states a single long column
             allstate = state.reshape(1, -1)
+            # make the action a single value
             allaction = np.array([action])
             alltarget = target
             indexes = [-1]
@@ -193,8 +202,11 @@ class deepQAgent(object):
 
             if update:
                 if len(self.memory) > self.config['batch_size']:
+                    # randomly select a batch from the memory
                     ind = np.random.choice(len(self.memory), self.config[
                         'batch_size'])
+
+                    # preparing the minibatch
                     for j in ind:
                         s, a, r, onew, d, Q, nextstate = self.memory[j]
 
@@ -225,11 +237,14 @@ class deepQAgent(object):
                         alternativetarget = alternativetarget * self.config['lambda'] + (r + self.config[
                             'discount'] * self.maxq(onew) * d) * (1. - self.config['lambda'])
 
+                        # appending the values to the minibatch                        
                         alltarget = np.concatenate((alltarget, alternativetarget),
                                                    0)  
                         allstate = np.concatenate((allstate, s.reshape(1, -1)), 0)
                         allaction = np.concatenate((allaction, np.array([a])), 0)
                         indexes.append(j)
+                        
+                    # turning the actions into selectors
                     allactionsparse = np.zeros((allstate.shape[0], self.n_out))
                     allactionsparse[np.arange(allaction.shape[0]), allaction] = 1.
 
